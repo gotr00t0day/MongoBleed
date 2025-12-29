@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 mongobleed_scanner.py - CVE-2025-14847 MongoDB Memory Leak Scanner
-Based on Joe Desimone's mongobleed.py exploit
-Modified by: c0d3ninja
+by: c0d3ninja
 
 Exploits zlib decompression bug to leak server memory via BSON field names.
 CVE-2025-14847: Mismatched length fields in Zlib compressed protocol headers 
