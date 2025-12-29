@@ -7,8 +7,6 @@ Exploits zlib decompression bug to leak server memory via BSON field names.
 CVE-2025-14847: Mismatched length fields in Zlib compressed protocol headers 
 allow unauthenticated clients to read uninitialized heap memory.
 
-Reference: https://thehackernews.com/2025/12/new-mongodb-flaw-lets-unauthenticated.html
-Original exploit: https://github.com/joe-desimone/mongobleed
 """
 
 import socket
